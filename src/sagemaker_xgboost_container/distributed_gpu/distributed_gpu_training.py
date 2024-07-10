@@ -92,6 +92,7 @@ def run_training_with_dask(
     start_daemons_in_current_instance(scheduler_address, is_scheduler_host)
 
     total_num_workers = len(sm_hosts) * num_gpus
+    feature_types = hyperparameters.get('feature_types', None)
 
     # We only need to submit the job from one instance.
     if is_scheduler_host:
@@ -104,8 +105,8 @@ def run_training_with_dask(
 
             X_train, y_train = read_data(train_path, content_type)
 
-            dtrain = create_dask_dmatrix(client, X_train, y_train)
-
+            dtrain = create_dask_dmatrix(client, X_train, y_train, feature_types)
+            logging.info("received feature_types:" + str(feature_types))
             # Log train data dimension for sanity check.
             train_num_rows, train_num_cols = get_dataframe_dimensions(X_train)
             logging.info(f"Train features matrix has {train_num_rows} rows and {train_num_cols} columns")
@@ -115,7 +116,7 @@ def run_training_with_dask(
             dvalid = None
             if validation_path:
                 X_valid, y_valid = read_data(validation_path, content_type)
-                dvalid = create_dask_dmatrix(client, X_valid, y_valid)
+                dvalid = create_dask_dmatrix(client, X_valid, y_valid, feature_types)
                 watchlist.append((dvalid, "validation"))
 
             logging.info("Data load complete. Starting training...")
@@ -173,7 +174,14 @@ def run_training_with_dask(
                 booster = output["booster"]
 
                 logging.info("Training complete. Saving model...")
-                booster.save_model(os.path.join(model_dir, MODEL_NAME))
+                logging.info("model name = ")
+                logging.info(MODEL_NAME)
+                logging.info("model dir=")
+                logging.info(model_dir)
+                if feature_types:
+                    booster.save_model(os.path.join(model_dir, "model.ubj"))
+                else:
+                    booster.save_model(os.path.join(model_dir, MODEL_NAME))
             except Exception as e:
                 exception_prefix = "XGB train call failed with exception"
                 raise exc.AlgorithmError(f"{exception_prefix}:\n {str(e)}")

@@ -291,7 +291,7 @@ def validate_data_file_path(data_path, content_type):
             return
 
 
-def _get_csv_dmatrix_file_mode(files_path, csv_weights):
+def _get_csv_dmatrix_file_mode(files_path, csv_weights, feature_types):
     """Get Data Matrix from CSV data in file mode.
 
     Infer the delimiter of data from first line of first data file.
@@ -311,11 +311,15 @@ def _get_csv_dmatrix_file_mode(files_path, csv_weights):
 
     try:
         if csv_weights == 1:
-            dmatrix = xgb.DMatrix(
-                "{}?format=csv&label_column=0&delimiter={}&weight_column=1".format(files_path, delimiter)
-            )
+            if feature_types:
+                dmatrix = xgb.DMatrix("{}?format=csv&label_column=0&delimiter={}&weight_column=1".format(files_path, delimiter), feature_types=feature_types, enable_categorical=True)
+            else:
+                dmatrix = xgb.DMatrix("{}?format=csv&label_column=0&delimiter={}&weight_column=1".format(files_path, delimiter))
         else:
-            dmatrix = xgb.DMatrix("{}?format=csv&label_column=0&delimiter={}".format(files_path, delimiter))
+            if feature_types:
+                dmatrix = xgb.DMatrix("{}?format=csv&label_column=0&delimiter={}".format(files_path, delimiter), feature_types=feature_types, enable_categorical=True)
+            else:
+                dmatrix = xgb.DMatrix("{}?format=csv&label_column=0&delimiter={}".format(files_path, delimiter))
 
     except Exception as e:
         raise exc.UserError("Failed to load csv data with exception:\n{}".format(e))
@@ -323,7 +327,7 @@ def _get_csv_dmatrix_file_mode(files_path, csv_weights):
     return dmatrix
 
 
-def _get_csv_dmatrix_pipe_mode(pipe_path, csv_weights):
+def _get_csv_dmatrix_pipe_mode(pipe_path, csv_weights, feature_types):
     """Get Data Matrix from CSV data in pipe mode.
 
     :param pipe_path: SageMaker pipe path where CSV formatted training data is piped
@@ -356,9 +360,15 @@ def _get_csv_dmatrix_pipe_mode(pipe_path, csv_weights):
             del examples
 
             if csv_weights == 1:
-                dmatrix = xgb.DMatrix(data[:, 2:], label=data[:, 0], weight=data[:, 1])
+                if feature_types:
+                    dmatrix = xgb.DMatrix(data[:, 2:], label=data[:, 0], weight=data[:, 1], feature_types=feature_types, enable_categorical=True)
+                else:
+                    dmatrix = xgb.DMatrix(data[:, 2:], label=data[:, 0], weight=data[:, 1])
             else:
-                dmatrix = xgb.DMatrix(data[:, 1:], label=data[:, 0])
+                if feature_types:
+                    dmatrix = xgb.DMatrix(data[:, 1:], label=data[:, 0], feature_types=feature_types, enable_categorical=True)
+                else:
+                    dmatrix = xgb.DMatrix(data[:, 1:], label=data[:, 0])
 
             return dmatrix
         else:
@@ -368,7 +378,7 @@ def _get_csv_dmatrix_pipe_mode(pipe_path, csv_weights):
         raise exc.UserError("Failed to load csv data with exception:\n{}".format(e))
 
 
-def get_csv_dmatrix(path, csv_weights, is_pipe=False):
+def get_csv_dmatrix(path, csv_weights, is_pipe=False, feature_types=None):
     """Get Data Matrix from CSV data.
 
     :param path: Path where CSV formatted training data resides, either directory, file, or SageMaker pipe
@@ -377,12 +387,12 @@ def get_csv_dmatrix(path, csv_weights, is_pipe=False):
     :return: xgb.DMatrix or None
     """
     if is_pipe:
-        return _get_csv_dmatrix_pipe_mode(path, csv_weights)
+        return _get_csv_dmatrix_pipe_mode(path, csv_weights, feature_types)
     else:
-        return _get_csv_dmatrix_file_mode(path, csv_weights)
+        return _get_csv_dmatrix_file_mode(path, csv_weights, feature_types)
 
 
-def get_libsvm_dmatrix(files_path, is_pipe=False):
+def get_libsvm_dmatrix(files_path, is_pipe=False, feature_types=None):
     """Get DMatrix from libsvm file path.
 
     Pipe mode not currently supported for libsvm.
@@ -395,14 +405,17 @@ def get_libsvm_dmatrix(files_path, is_pipe=False):
         raise exc.UserError("Pipe mode not supported for LibSVM.")
 
     try:
-        dmatrix = xgb.DMatrix(files_path)
+        if feature_types:
+            dmatrix = xgb.DMatrix(files_path, feature_types=feature_types, enable_categorical=True)
+        else:
+            dmatrix = xgb.DMatrix(files_path)
     except Exception as e:
         raise exc.UserError("Failed to load libsvm data with exception:\n{}".format(e))
 
     return dmatrix
 
 
-def _get_parquet_dmatrix_file_mode(files_path):
+def _get_parquet_dmatrix_file_mode(files_path, feature_types):
     """Get Data Matrix from parquet data in file mode.
 
     :param files_path: File path where parquet formatted training data resides, either directory or file
@@ -417,8 +430,11 @@ def _get_parquet_dmatrix_file_mode(files_path):
         if type(data) is pd.DataFrame:
             # pyarrow.Table.to_pandas may produce NumPy array or pandas DataFrame
             data = data.to_numpy()
+        if feature_types:
+            dmatrix = xgb.DMatrix(data[:, 1:], label=data[:, 0], feature_types=feature_types, enable_categorical=True)
+        else:
+            dmatrix = xgb.DMatrix(data[:, 1:], label=data[:, 0])
 
-        dmatrix = xgb.DMatrix(data[:, 1:], label=data[:, 0])
         del data
 
         return dmatrix
@@ -427,7 +443,7 @@ def _get_parquet_dmatrix_file_mode(files_path):
         raise exc.UserError("Failed to load parquet data with exception:\n{}".format(e))
 
 
-def _get_parquet_dmatrix_pipe_mode(pipe_path):
+def _get_parquet_dmatrix_pipe_mode(pipe_path, feature_types):
     """Get Data Matrix from parquet data in pipe mode.
 
     :param pipe_path: SageMaker pipe path where parquet formatted training data is piped
@@ -452,8 +468,10 @@ def _get_parquet_dmatrix_pipe_mode(pipe_path):
         if examples:
             data = np.vstack(examples)
             del examples
-
-            dmatrix = xgb.DMatrix(data[:, 1:], label=data[:, 0])
+            if feature_types:
+                dmatrix = xgb.DMatrix(data[:, 1:], label=data[:, 0], feature_types=feature_types, enable_categorical=True)
+            else:
+                dmatrix = xgb.DMatrix(data[:, 1:], label=data[:, 0])
             return dmatrix
         else:
             return None
@@ -462,7 +480,7 @@ def _get_parquet_dmatrix_pipe_mode(pipe_path):
         raise exc.UserError("Failed to load parquet data with exception:\n{}".format(e))
 
 
-def get_parquet_dmatrix(path, is_pipe=False):
+def get_parquet_dmatrix(path, is_pipe=False, feature_types=None):
     """Get Data Matrix from parquet data.
 
     :param path: Path where parquet formatted training data resides, either directory, file, or SageMaker pipe
@@ -470,12 +488,12 @@ def get_parquet_dmatrix(path, is_pipe=False):
     :return: xgb.DMatrix or None
     """
     if is_pipe:
-        return _get_parquet_dmatrix_pipe_mode(path)
+        return _get_parquet_dmatrix_pipe_mode(path, feature_types)
     else:
-        return _get_parquet_dmatrix_file_mode(path)
+        return _get_parquet_dmatrix_file_mode(path, feature_types)
 
 
-def get_recordio_protobuf_dmatrix(path, is_pipe=False):
+def get_recordio_protobuf_dmatrix(path, is_pipe=False, feature_types=None):
     """Get Data Matrix from recordio-protobuf data.
 
     :param path: Path where recordio-protobuf formatted training data resides, either directory, file, or SageMaker pipe
@@ -507,7 +525,10 @@ def get_recordio_protobuf_dmatrix(path, is_pipe=False):
 
             all_features = np.vstack(all_features) if is_dense_tensor else scipy_vstack(all_features).tocsr()
             all_labels = np.concatenate(all_labels, axis=None)
-            dmatrix = xgb.DMatrix(all_features, label=all_labels)
+            if feature_types:
+                dmatrix = xgb.DMatrix(all_features, label=all_labels, feature_types=feature_types, enable_categorical=True)
+            else:
+                dmatrix = xgb.DMatrix(all_features, label=all_labels)
             return dmatrix
         else:
             return None
@@ -602,7 +623,7 @@ def _get_file_mode_files_path(data_path: Union[List[str], str]) -> List[str]:
     return files_path
 
 
-def get_dmatrix(data_path, content_type, csv_weights=0, is_pipe=False):
+def get_dmatrix(data_path, content_type, csv_weights=0, is_pipe=False, feature_types=None):
     """Create Data Matrix from CSV or LIBSVM file.
 
     Assumes that sanity validation for content type has been done.
@@ -632,13 +653,13 @@ def get_dmatrix(data_path, content_type, csv_weights=0, is_pipe=False):
         files_path = _get_file_mode_files_path(data_path)
     logging.info(f"files path: {files_path}")
     if content_type.lower() == CSV:
-        dmatrix = get_csv_dmatrix(files_path, csv_weights, is_pipe)
+        dmatrix = get_csv_dmatrix(files_path, csv_weights, is_pipe, feature_types)
     elif content_type.lower() == LIBSVM:
-        dmatrix = get_libsvm_dmatrix(files_path, is_pipe)
+        dmatrix = get_libsvm_dmatrix(files_path, is_pipe, feature_types)
     elif content_type.lower() == PARQUET:
-        dmatrix = get_parquet_dmatrix(files_path, is_pipe)
+        dmatrix = get_parquet_dmatrix(files_path, is_pipe, feature_types)
     elif content_type.lower() == RECORDIO_PROTOBUF:
-        dmatrix = get_recordio_protobuf_dmatrix(files_path, is_pipe)
+        dmatrix = get_recordio_protobuf_dmatrix(files_path, is_pipe, feature_types)
 
     if dmatrix and dmatrix.get_label().size == 0:
         raise exc.UserError(

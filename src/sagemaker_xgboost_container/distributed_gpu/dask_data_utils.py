@@ -12,7 +12,7 @@
 # language governing permissions and limitations under the License.
 
 import os
-
+import logging
 import dask.dataframe as dask_dataframe
 from dask.dataframe import DataFrame, Series
 from dask.distributed import Client
@@ -45,9 +45,13 @@ def get_dataframe_dimensions(dataframe: DataFrame) -> (int, int):
     return rows, cols
 
 
-def create_dask_dmatrix(client: Client, features: DataFrame, labels: Series) -> DaskDMatrix:
+def create_dask_dmatrix(client: Client, features: DataFrame, labels: Series, feature_types) -> DaskDMatrix:
     try:
-        dmatrix = DaskDMatrix(client, features, labels)
+        if feature_types:
+            logging.info(str(feature_types))
+            dmatrix = DaskDMatrix(client, features, labels, feature_types=feature_types, enable_categorical=True)
+        else:
+            dmatrix = DaskDMatrix(client, features, labels)
     except Exception as e:
         raise AlgorithmError(f"Failed to create DaskDMatrix with given data. Exception: {e}")
     return dmatrix

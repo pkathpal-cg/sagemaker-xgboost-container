@@ -49,7 +49,7 @@ DOCUMENTATION_LINK = "https://docs.aws.amazon.com/sagemaker/latest/dg/xgboost.ht
 
 
 def get_validated_dmatrices(
-    train_path, validate_path, content_type, csv_weights=0, is_pipe=False, combine_train_val=False
+    train_path, validate_path, content_type, csv_weights=0, is_pipe=False, combine_train_val=False, feature_types=None
 ):
     """Get training and validation Data Matrices for XGBoost training.
 
@@ -80,12 +80,12 @@ def get_validated_dmatrices(
             validate_data_file_path(validate_path, content_type)
 
     train_dmatrix = (
-        get_dmatrix(train_path, content_type, csv_weights=csv_weights, is_pipe=is_pipe)
+        get_dmatrix(train_path, content_type, csv_weights=csv_weights, is_pipe=is_pipe, feature_types=feature_types)
         if train_files_size > 0
         else None
     )
     val_dmatrix = (
-        get_dmatrix(validate_path, content_type, csv_weights=csv_weights, is_pipe=is_pipe)
+        get_dmatrix(validate_path, content_type, csv_weights=csv_weights, is_pipe=is_pipe, feature_types=feature_types)
         if val_files_size > 0
         else None
     )
@@ -94,7 +94,7 @@ def get_validated_dmatrices(
     if combine_train_val and train_dmatrix is not None and val_dmatrix is not None:
         logging.info("Read both train and validation data into one DMatrix")
         train_val_dmatrix = get_dmatrix(
-            [train_path, validate_path], content_type, csv_weights=csv_weights, is_pipe=is_pipe
+            [train_path, validate_path], content_type, csv_weights=csv_weights, is_pipe=is_pipe, feature_types=feature_types
         )
 
     return train_dmatrix, val_dmatrix, train_val_dmatrix
@@ -121,7 +121,10 @@ def sagemaker_train(
     metrics = metrics_mod.initialize()
 
     hyperparameters = hpv.initialize(metrics)
+    logging.info(hyperparameters)
     validated_train_config = hyperparameters.validate(train_config)
+    logging.info("validated hyperparameters-")
+    logging.info(validated_train_config)
     if validated_train_config.get("updater"):
         validated_train_config["updater"] = ",".join(validated_train_config["updater"])
 
@@ -159,7 +162,9 @@ def sagemaker_train(
     tree_method_hp = validated_train_config.get("tree_method")
 
     is_dask_job = validated_train_config.pop("use_dask_gpu_training", "false")
-
+    feature_types = validated_train_config.get("feature_types", None)
+    logging.info("in train py, feature_types = below")
+    logging.info(feature_types)
     if is_dask_job == "true":
         gpu_train_validation_errors = distributed_gpu_training.validate_gpu_train_configuration(
             tree_method_hp=tree_method_hp,
@@ -196,7 +201,7 @@ def sagemaker_train(
             )
 
         train_dmatrix, val_dmatrix, train_val_dmatrix = get_validated_dmatrices(
-            train_path, val_path, file_type, csv_weights, is_pipe, combine_train_val
+            train_path, val_path, file_type, csv_weights, is_pipe, combine_train_val, feature_types
         )
 
         missing_validation_data = validation_channel and not val_dmatrix

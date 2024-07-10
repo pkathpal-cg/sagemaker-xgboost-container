@@ -12,7 +12,7 @@
 # language governing permissions and limitations under the License.
 import ast
 import sys
-
+import logging
 from sagemaker_algorithm_toolkit import exceptions as exc
 
 
@@ -171,9 +171,12 @@ class CommaSeparatedListHyperparameter(Hyperparameter):
         super(CommaSeparatedListHyperparameter, self).__init__(*args, **kwargs)
 
     def parse(self, value):
+        logging.info("in csv parse hpv")
+        logging.info(str(value))
         return value.split(",")
 
     def validate_range(self, value):
+        logging.info("in csv validate range hpv")
         if any([v not in self.range for v in value]):
             raise exc.UserError("Hyperparameter {}: value {} not in range {}".format(self.name, value, self.range))
 
